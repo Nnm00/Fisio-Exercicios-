@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#4f46e5">
+<title>Fisio Exercícios</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#202124}
+header{background:#4f46e5;color:white;padding:22px 18px;border-radius:0 0 22px 22px}
+header h1{margin:0 0 5px;font-size:25px}header p{margin:0;opacity:.9}
+nav{display:flex;gap:8px;padding:12px;position:sticky;top:0;background:#f5f7fb;z-index:5}
+nav button,.btn{border:0;border-radius:12px;padding:11px 14px;background:white;box-shadow:0 1px 5px #0001;font-weight:600;cursor:pointer}
+nav button.active,.primary{background:#4f46e5;color:white}
+main{max-width:900px;margin:auto;padding:10px 14px 40px}
+.card{background:white;border-radius:18px;padding:17px;margin:12px 0;box-shadow:0 2px 10px #0000000d}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center}.muted{color:#6b7280;font-size:14px}
+input,textarea,select{width:100%;padding:12px;border:1px solid #d9dce3;border-radius:10px;margin:6px 0 12px;font-size:15px}
+label{font-weight:600;font-size:14px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.exercise{border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin:10px 0}
+.exercise h3{margin:0 0 5px}.tag{display:inline-block;background:#eef2ff;color:#3730a3;border-radius:20px;padding:5px 9px;font-size:12px;margin:3px}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.hidden{display:none}.done{opacity:.65;background:#f0fdf4}.done h3{text-decoration:line-through}
+.small{font-size:12px}.danger{color:#b91c1c}.success{color:#15803d}
+</style>
+</head>
+<body>
+<div id="auth" class="card" style="max-width:430px;margin:50px auto;padding:25px"><h2>Fisio Exercícios</h2><p class="muted">Acesso da fisioterapeuta</p><label>E-mail</label><input id="email" type="email" placeholder="seu e-mail"><label>Senha</label><input id="password" type="password" placeholder="sua senha"><button class="btn primary" style="width:100%" onclick="login()">Entrar</button></div>
+<div id="app" class="hidden">
+<header><button class="btn" style="float:right" onclick="logout()">Sair</button><h1>Fisio Exercícios</h1><p>Ficha digital de exercícios para acompanhamento de pacientes</p></header>
+<nav>
+<button id="navPatients" class="active" onclick="show('patients')">👤 Pacientes</button>
+<button id="navWorkout" onclick="show('workout')">🏋️ Ficha atual</button>
+<button id="navBackup" onclick="show('backup')">⚙️ Dados</button>
+</nav>
+<main>
+<section id="patients">
+<div class="row"><h2>Pacientes</h2><button class="btn primary" onclick="newPatient()">+ Nova paciente</button></div>
+<div id="patientList"></div>
+</section>
+
+<section id="workout" class="hidden">
+<div id="workoutContent"></div>
+</section>
+
+<section id="backup" class="hidden">
+<h2>Dados</h2>
+<div class="card">
+<p><b>Importante:</b> os dados ficam salvos neste navegador. Faça um backup regularmente.</p>
+<div class="actions">
+<button class="btn primary" onclick="exportData()">⬇️ Exportar backup</button>
+<label class="btn">⬆️ Importar backup<input type="file" accept=".json" onchange="importData(event)" hidden></label>
+</div>
+</div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL='https://zicysovmhxnmwspxpwmd.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_fGoRJ-fOU6I__mXpaPsg-w_zrYbE9tm';
+const {createClient}=supabase;
+const sb=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+let session=null, patients=[], selected=null;
+const DAYS=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
+const $=id=>document.getElementById(id);
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+function show(sec){['patients','workout','backup'].forEach(x=>$(x)?.classList.toggle('hidden',x!==sec));document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));const b=$('nav'+sec[0].toUpperCase()+sec.slice(1));if(b)b.classList.add('active');if(sec==='patients')renderPatients();if(sec==='workout')renderWorkout();}
+function toast(msg){alert(msg)}
+async function init(){const r=await sb.auth.getSession();session=r.data.session;if(session){await loadPatients();show('patients');$('auth').classList.add('hidden');$('app').classList.remove('hidden')}else{$('auth').classList.remove('hidden');$('app').classList.add('hidden')}}
+async function login(){const email=$('email').value.trim(),password=$('password').value;if(!email||!password)return toast('Informe e-mail e senha.');const r=await sb.auth.signInWithPassword({email,password});if(r.error)return toast(r.error.message);session=r.data.session;await loadPatients();$('auth').classList.add('hidden');$('app').classList.remove('hidden');show('patients')}
+async function logout(){await sb.auth.signOut();session=null;patients=[];selected=null;init()}
+async function loadPatients(){const r=await sb.from('patients').select('*').order('created_at',{ascending:false});if(r.error){toast('Erro ao carregar pacientes. Verifique se você executou o SQL de segurança que acompanha o arquivo.');return}patients=r.data||[]}
+function renderPatients(){const el=$('patientList');if(!patients.length){el.innerHTML='<div class="card"><p>Nenhuma paciente cadastrada ainda.</p><button class="btn primary" onclick="newPatient()">Cadastrar primeira paciente</button></div>';return}el.innerHTML=patients.map(p=>`<div class="card"><div class="row"><div><h3>${esc(p.name)}</h3><div class="muted">${esc(p.goal)||'Objetivo não informado'}</div></div><button class="btn primary" onclick="selectPatient('${p.id}')">Abrir ficha</button></div></div>`).join('')}
+async function newPatient(){const name=prompt('Nome da paciente:');if(!name)return;const r=await sb.from('patients').insert({name,goal:'',notes:'',therapist_id:session.user.id}).select().single();if(r.error){return toast('Não foi possível cadastrar. Execute o SQL de segurança do pacote e tente novamente.')}patients.unshift(r.data);selected=r.data.id;show('workout')}
+function selectPatient(id){selected=id;show('workout')}
+async function updatePatient(k,v){const r=await sb.from('patients').update({[k]:v}).eq('id',selected);if(r.error)toast('Erro ao salvar.');else{const p=patients.find(x=>x.id===selected);if(p)p[k]=v}}
+async function getExercises(){const r=await sb.from('exercises').select('*').eq('patient_id',selected).order('created_at');if(r.error){toast('Erro ao carregar exercícios.');return []}const ids=(r.data||[]).map(e=>e.id);let done=new Set();if(ids.length){const c=await sb.from('exercise_completion').select('exercise_id').in('exercise_id',ids);if(!c.error)done=new Set((c.data||[]).map(x=>x.exercise_id))}return (r.data||[]).map(e=>({...e,done:done.has(e.id)}))}
+async function renderWorkout(){const el=$('workoutContent');const p=patients.find(x=>x.id===selected);if(!p){el.innerHTML='<div class="card"><p>Selecione uma paciente em Pacientes.</p></div>';return}const ex=await getExercises();const by={};DAYS.forEach(d=>by[d]=[]);ex.forEach(e=>(by[e.day_of_week]??(by[e.day_of_week]=[])).push(e));el.innerHTML=`<div class="row"><div><h2>${esc(p.name)}</h2><div class="muted">Ficha semanal conectada ao Supabase</div></div><div class="actions"><button class="btn" onclick="show('patients')">← Pacientes</button></div></div><div class="card"><label>Objetivo</label><input value="${esc(p.goal)}" onchange="updatePatient('goal',this.value)"><label>Orientações gerais</label><textarea onchange="updatePatient('notes',this.value)">${esc(p.notes)}</textarea></div><div class="grid">${DAYS.map(day=>`<div class="card"><div class="row"><h2 style="font-size:19px;margin:0">${day}</h2><button class="btn primary" onclick="addExercise('${day}')">+ Exercício</button></div>${by[day].length?by[day].map(e=>exerciseHTML(e)).join(''):'<p class="muted">Nenhum exercício.</p>'}</div>`).join('')}</div><div class="card"><button class="btn danger" onclick="deletePatient()">Excluir paciente</button></div>`}
+function exerciseHTML(e){return `<div class="exercise"><div class="row"><div><h3>${esc(e.name)}</h3>${e.muscle_group?'<span class="tag">'+esc(e.muscle_group)+'</span>':''}</div><input type="checkbox" ${e.done?'checked':''} style="width:24px;height:24px" onchange="toggleDone('${e.id}',${e.done?'false':'true'})"></div><div class="grid"><div><b>Séries</b><br>${esc(e.sets)||'-'}</div><div><b>Repetições</b><br>${esc(e.reps)||'-'}</div><div><b>Carga</b><br>${esc(e.load)||'-'}</div><div><b>Descanso</b><br>${esc(e.rest)||'-'}</div></div>${e.instructions?'<p><b>Orientações:</b> '+esc(e.instructions)+'</p>':''}${e.video_url?'<p><a href="'+esc(e.video_url)+'" target="_blank">▶️ Ver vídeo/demonstração</a></p>':''}<div class="actions"><button class="btn" onclick="editExercise('${e.id}')">Editar</button><button class="btn" onclick="deleteExercise('${e.id}')">Excluir</button></div></div>`}
+async function addExercise(day){const name=prompt('Nome do exercício:');if(!name)return;const r=await sb.from('exercises').insert({patient_id:selected,day_of_week:day,name,sets:'3',reps:'10-12',load:'',rest:'60 s',muscle_group:'',instructions:'',video_url:''}).select().single();if(r.error)return toast('Erro ao adicionar exercício.');await renderWorkout()}
+async function editExercise(id){const r=await sb.from('exercises').select('*').eq('id',id).single();if(r.error)return;const e=r.data;e.name=prompt('Exercício:',e.name)||e.name;e.sets=prompt('Séries:',e.sets)||'';e.reps=prompt('Repetições:',e.reps)||'';e.load=prompt('Carga:',e.load)||'';e.rest=prompt('Descanso:',e.rest)||'';e.muscle_group=prompt('Grupo muscular:',e.muscle_group)||'';e.instructions=prompt('Orientações:',e.instructions)||'';e.video_url=prompt('Link do vídeo (opcional):',e.video_url)||'';const r2=await sb.from('exercises').update({name:e.name,sets:e.sets,reps:e.reps,load:e.load,rest:e.rest,muscle_group:e.muscle_group,instructions:e.instructions,video_url:e.video_url}).eq('id',id);if(r2.error)toast('Erro ao salvar.');await renderWorkout()}
+async function toggleDone(exerciseId,done){if(done){const r=await sb.from('exercise_completion').insert({exercise_id:exerciseId});if(r.error)toast('Não foi possível registrar a conclusão.')}else{await sb.from('exercise_completion').delete().eq('exercise_id',exerciseId)}await renderWorkout()}
+async function deleteExercise(id){if(!confirm('Excluir este exercício?'))return;await sb.from('exercises').delete().eq('id',id);await renderWorkout()}
+async function deletePatient(){if(!confirm('Excluir esta paciente e todos os exercícios dela?'))return;const r=await sb.from('patients').delete().eq('id',selected);if(r.error)return toast('Erro ao excluir.');patients=patients.filter(p=>p.id!==selected);selected=null;show('patients')}
+async function exportData(){const all=[];for(const p of patients){const r=await sb.from('exercises').select('*').eq('patient_id',p.id);all.push({...p,exercises:r.data||[]})}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(all,null,2)],{type:'application/json'}));a.download='backup-fisio-exercicios.json';a.click()}
+function importData(){toast('A importação do backup será adicionada na próxima versão. Por enquanto, use o Supabase como banco principal.')}
+init();
+</script>
+</div>
+</body>
+</html>
